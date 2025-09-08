@@ -29,7 +29,7 @@ def start_local_server() -> int:
         except OSError:
             port += 1
             if port > DEFAULT_PORT + 50:
-                raise RuntimeError("Não foi possível encontrar uma porta livre.")
+                raise RuntimeError("Could not find a free port.")
 
     _http_thread = threading.Thread(target=_httpd.serve_forever, daemon=True)
     _http_thread.start()

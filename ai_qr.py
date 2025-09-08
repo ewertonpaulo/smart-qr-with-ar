@@ -9,14 +9,14 @@ def generate_artistic_qr(content: str, prompt: str, negative_prompt: str) -> Ima
         from utils.qr_utils import generate_qr_image
         from qrcode.constants import ERROR_CORRECT_H
     except ImportError:
-        print("Erro: Dependências não encontradas.", file=sys.stderr)
+        print("Error: Required dependencies not found.", file=sys.stderr)
         return None
 
     qr_image = generate_qr_image(content, border=1, error_correction=ERROR_CORRECT_H)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch_dtype = torch.float16 if device == "cuda" else torch.float32
-    print(f"Usando dispositivo: {device.upper()}")
+    print(f"Using device: {device.upper()}")
 
     controlnet = ControlNetModel.from_pretrained("DionTimmer/controlnet_qrcode-control_v1p_sd15", torch_dtype=torch_dtype).to(device)
     pipe = StableDiffusionControlNetPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", controlnet=controlnet, torch_dtype=torch_dtype, safety_checker=None).to(device)
@@ -25,9 +25,9 @@ def generate_artistic_qr(content: str, prompt: str, negative_prompt: str) -> Ima
     try:
         pipe.enable_xformers_memory_efficient_attention()
     except ImportError:
-        print("xFormers não encontrado. Para uma geração mais rápida em GPUs NVIDIA, instale com: pip install xformers")
+        print("xFormers not found. For faster generation on NVIDIA GPUs, install with: pip install xformers")
 
-    print("Gerando imagem com IA...")
+    print("Generating AI image...")
     generated_image = pipe(
         prompt=prompt,
         negative_prompt=negative_prompt,

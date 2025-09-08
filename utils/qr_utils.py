@@ -1,8 +1,12 @@
+# utils/qr_utils.py
+
 from pathlib import Path
 from PIL import Image
 import qrcode
-from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_M
-from utils import ensure_unique_filename, SAVED_DIR
+from qrcode.constants import ERROR_CORRECT_M, ERROR_CORRECT_H
+
+# Import relativo corrigido
+from .utils import ensure_unique_filename, SAVED_DIR
 
 def generate_qr_image(
         content: str,

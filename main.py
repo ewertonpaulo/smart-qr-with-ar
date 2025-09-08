@@ -1,6 +1,5 @@
-# main.py
-
 import sys
+import os
 from utils.utils import prompt, APP_NAME
 from actions import (
     action_generate_qr,
@@ -9,14 +8,17 @@ from actions import (
 )
 from local_server import stop_local_server
 
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
 def print_menu():
     print("\n" + "=" * 50)
     print(f"{APP_NAME}")
     print("=" * 50)
-    print("1) Gerar QR Code (padrão ou artístico)")
-    print("2) Publicar mídia e gerar QR com link local")
-    print("3) Adicionar QR Code (padrão ou artístico) em uma imagem")
-    print("0) Sair")
+    print("1) Generate QR Code (standard or artistic)")
+    print("2) Publish media and generate QR with local link")
+    print("3) Add QR Code (standard or artistic) to an image")
+    print("0) Exit")
     print("-" * 50)
 
 def main():
@@ -27,8 +29,9 @@ def main():
     }
     try:
         while True:
+            clear_screen()
             print_menu()
-            choice = prompt("Escolha uma opção: ").strip()
+            choice = prompt("Choose an option: ").strip()
 
             if choice == "0":
                 break
@@ -37,15 +40,15 @@ def main():
             if action:
                 action()
             else:
-                print("Opção inválida. Tente novamente.")
+                print("Invalid option. Please try again.")
     finally:
-        print("Encerrando servidor local (se ativo)...")
+        print("Shutting down local server (if active)...")
         stop_local_server()
-        print("Programa finalizado.")
+        print("Program finished.")
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nSaindo...")
+        print("\nExiting...")
         sys.exit(0)
