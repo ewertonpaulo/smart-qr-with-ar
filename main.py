@@ -2,11 +2,11 @@ import sys
 import os
 from utils.utils import prompt, APP_NAME
 from actions import (
-    action_generate_qr,
     action_add_watermark_qr,
-    action_media_qr_local
+    action_watermark_with_media_link
 )
-from local_server import stop_local_server
+from local_server import stop_local_server, start_local_server
+
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -15,19 +15,23 @@ def print_menu():
     print("\n" + "=" * 50)
     print(f"{APP_NAME}")
     print("=" * 50)
-    print("1) Generate QR Code (standard or artistic)")
-    print("2) Publish media and generate QR with local link")
-    print("3) Add QR Code (standard or artistic) to an image")
+    # print("1) Generate QR Code")
+    # print("2) Publish media and generate QR with link")
+    print("1) Add a memory to image")
+    print("2) Add QR Code to an image")
     print("0) Exit")
     print("-" * 50)
 
 def main():
     actions = {
-        "1": action_generate_qr,
-        "2": action_media_qr_local,
-        "3": action_add_watermark_qr,
+        # "1": action_generate_qr,
+        # "2": action_media_qr_local,
+        "2": action_add_watermark_qr,
+        "1": action_watermark_with_media_link,
     }
     try:
+        start_local_server()
+
         while True:
             clear_screen()
             print_menu()

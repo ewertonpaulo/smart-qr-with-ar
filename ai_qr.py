@@ -7,12 +7,12 @@ def generate_artistic_qr(content: str, prompt: str, negative_prompt: str) -> Ima
         import torch
         from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, DPMSolverMultistepScheduler
         from utils.qr_utils import generate_qr_image
-        from qrcode.constants import ERROR_CORRECT_H
+        from qrcode.constants import ERROR_CORRECT_M
     except ImportError:
         print("Error: Required dependencies not found.", file=sys.stderr)
         return None
 
-    qr_image = generate_qr_image(content, border=1, error_correction=ERROR_CORRECT_H)
+    qr_image = generate_qr_image(content, border=1, error_correction=ERROR_CORRECT_M)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch_dtype = torch.float16 if device == "cuda" else torch.float32

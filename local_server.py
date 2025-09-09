@@ -1,6 +1,7 @@
 import threading
 from pathlib import Path
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+import shutil
 
 PUBLIC_DIR = Path("public").resolve()
 MEDIA_SUBDIR = PUBLIC_DIR / "media"
@@ -13,6 +14,25 @@ class QuietHTTPRequestHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def log_error(self, format, *args):
+        pass
+
+    def copyfile(self, source, outputfile):
+        try:
+            shutil.copyfileobj(source, outputfile)
+        except (BrokenPipeError, ConnectionResetError):
+            try:
+                outputfile.flush()
+            except Exception:
+                pass
+
+class QuietHTTPServer(ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        import sys
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
+            return
+
 def start_local_server() -> int:
     global _httpd, _http_thread
     if _httpd:
@@ -24,7 +44,8 @@ def start_local_server() -> int:
     while True:
         try:
             handler_args = {'directory': str(PUBLIC_DIR)}
-            _httpd = ThreadingHTTPServer(("0.0.0.0", port), lambda *a, **kw: QuietHTTPRequestHandler(*a, **handler_args))
+            _httpd = QuietHTTPServer(("0.0.0.0", port),
+                                     lambda *a, **kw: QuietHTTPRequestHandler(*a, **handler_args))
             break
         except OSError:
             port += 1
