@@ -33,6 +33,9 @@ class QuietHTTPServer(ThreadingHTTPServer):
         if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
             return
 
+def get_port():
+    return _httpd.server_port
+
 def start_local_server() -> int:
     global _httpd, _http_thread
     if _httpd:

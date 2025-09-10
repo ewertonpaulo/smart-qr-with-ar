@@ -17,7 +17,6 @@ def add_qr_watermark(
         noise_amount: float = 0.12,    # ruído multiplicativo (0.05–0.20)
         opacity: float = 0.80,         # opacidade dos módulos pretos
         bg_opacity: float = 0.40,      # opacidade do background
-        bg_source: str = "image",      # "image" (do patch) ou "complement"
         color_contrast_amount: float = 0.15,  # intensidade do ruído cromático (0.05–0.30)
         min_contrast: float = 2.8,
 ) -> Path:
@@ -135,20 +134,12 @@ def _find_best_texture_tile(patch: Image.Image, tile_px: int) -> Image.Image:
     edges = gray.filter(ImageFilter.FIND_EDGES)
     w, h = edges.size
     gw, gh = max(1, w // tile_px), max(1, h // tile_px)
-    agg = edges.resize((gw, gh), resample=Image.BOX)  # média por bloco
+    agg = edges.resize((gw, gh), resample=Image.BOX)
     arr = list(agg.getdata())
     k = arr.index(max(arr))
     cx, cy = k % gw, k // gw
     x0, y0 = min(w - tile_px, cx * tile_px), min(h - tile_px, cy * tile_px)
     return patch.crop((x0, y0, x0 + tile_px, y0 + tile_px))
-
-def _contrast_ratio(rgb1, rgb2):
-    # usa a mesma luminância relativa do teu helper _rel_luminance
-    L1 = _rel_luminance(rgb1[:3])
-    L2 = _rel_luminance(rgb2[:3])
-    if L1 < L2:
-        L1, L2 = L2, L1
-    return (L1 + 0.05) / (L2 + 0.05)
 
 def _contrasting_color_from_patch(
         patch: Image.Image,

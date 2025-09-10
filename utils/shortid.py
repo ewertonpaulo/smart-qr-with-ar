@@ -28,12 +28,6 @@ def _int_to_base62(n: int) -> str:
         chars.append(ALPHABET[r])
     return "".join(reversed(chars))
 
-def hash_code_from_bytes(data: bytes, length: int = 9) -> str:
-    h = hashlib.sha256(data).digest()
-    n = int.from_bytes(h, "big")
-    b62 = _int_to_base62(n)
-    return b62[:length]
-
 def hash_code_from_file(path: Path, length: int = 9, chunk: int = 1 << 20) -> str:
     sha = hashlib.sha256()
     with open(path, "rb") as f:

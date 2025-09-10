@@ -15,8 +15,6 @@ def print_menu():
     print("\n" + "=" * 50)
     print(f"{APP_NAME}")
     print("=" * 50)
-    # print("1) Generate QR Code")
-    # print("2) Publish media and generate QR with link")
     print("1) Add a memory to image")
     print("2) Add QR Code to an image")
     print("0) Exit")
@@ -24,8 +22,6 @@ def print_menu():
 
 def main():
     actions = {
-        # "1": action_generate_qr,
-        # "2": action_media_qr_local,
         "2": action_add_watermark_qr,
         "1": action_watermark_with_media_link,
     }
