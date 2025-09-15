@@ -1,8 +1,8 @@
 import colorsys
 from pathlib import Path
-from random import random
+from random import randint
 
-from PIL import Image, ImageOps, ImageFilter, ImageChops
+from PIL import Image, ImageOps, ImageFilter, ImageChops, ImageDraw, ImageFont
 from .qr_utils import generate_qr_image
 from .utils import ensure_unique_filename, SAVED_DIR
 from qrcode.constants import ERROR_CORRECT_M
@@ -13,215 +13,299 @@ def add_qr_watermark(
         corner: str = "bottom-right",
         size: float = 0.20,
         margin: float = 0.02,
-        tile_ratio: float = 0.22,      # janela para escolher a cor dentro do patch
-        noise_amount: float = 0.12,    # ruído multiplicativo (0.05–0.20)
-        opacity: float = 0.80,         # opacidade dos módulos pretos
-        bg_opacity: float = 0.40,      # opacidade do background
-        color_contrast_amount: float = 0.15,  # intensidade do ruído cromático (0.05–0.30)
+        tile_ratio: float = 0.22,
+        noise_amount: float = 0.12,
+        opacity: float = 0.80,
+        bg_opacity: float = 0.40,
+        color_contrast_amount: float = 0.15,
         min_contrast: float = 2.8,
 ) -> Path:
-    base = Image.open(base_image_path).convert("RGBA")
-    W, H = base.size
-    side = int(round(W * size))
-    margin_px = int(round(min(W, H) * margin))
+    """
+    Adds a stylized QR code watermark to an image.
 
-    # posicionamento
-    if corner not in {"top-left","top-right","bottom-left","bottom-right"}:
-        corner = "bottom-right"
-    if corner == "bottom-right": x, y = W - side - margin_px, H - side - margin_px
-    elif corner == "bottom-left": x, y = margin_px, H - side - margin_px
-    elif corner == "top-right": x, y = W - side - margin_px, margin_px
-    else: x, y = margin_px, margin_px
+    The QR code is generated with colors extracted from the image itself to blend in
+    visually, applying noise and textures for a more artistic finish while ensuring
+    sufficient contrast for scannability.
 
-    # patch do canto (fundo fora do patch permanece intocado)
-    patch = base.crop((x, y, x + side, y + side)).convert("RGBA")
+    Args:
+        base_image_path: The path to the base image.
+        qr_content: The content to be encoded in the QR code (e.g., a URL).
+        corner: The corner to position the QR code ('top-left', 'top-right', 'bottom-left', 'bottom-right').
+        size: The width of the QR code as a fraction of the base image's width (e.g., 0.2 for 20%).
+        margin: The margin from the image edges, as a fraction of the smaller dimension.
+        tile_ratio: The fraction of the QR code area used to find a "texture" and extract colors.
+        noise_amount: The intensity of luminance noise (grain) on the QR code modules.
+        opacity: The opacity of the QR code modules (0.0 to 1.0).
+        bg_opacity: The opacity of the QR code's background layer (0.0 to 1.0).
+        color_contrast_amount: The intensity of chromatic noise (color mixing) on the modules.
+        min_contrast: The minimum contrast ratio to be enforced between the QR code colors.
 
-    # sub-bloco mais contrastado para EXTRAIR A COR dos módulos
-    tile_px = max(16, int(side * tile_ratio))
-    tile = _find_best_texture_tile(patch, tile_px)
+    Returns:
+        The file path of the finalized and saved image.
+    """
+    base_image = Image.open(base_image_path).convert("RGBA")
+    base_width, base_height = base_image.size
 
-    # cor sólida dos módulos (auto-contraste vs luminância média do patch)
-    patch_avg_lum = _rel_luminance(ImageOps.fit(patch.convert("RGB"), (1,1), Image.BOX).getpixel((0,0)))
-    solid_color = _pick_high_contrast_color(tile, patch_avg_lum)  # (r,g,b,255)
+    # --- 1. Calculate QR code dimensions and position ---
+    qr_side_px = int(round(base_width * size))
+    margin_px = int(round(min(base_width, base_height) * margin))
 
-    # cor de background: da própria imagem (tile/patch) ou complementar
-    bg_rgb = _contrasting_color_from_patch(patch, solid_color, scope="tile", tile=tile, sat_floor=0.0)
-    bg_rgb = _ensure_min_contrast_bg(solid_color[:3], bg_rgb, min_ratio=min_contrast)
+    # Define the (x, y) coordinates of the top-left corner of the QR code
+    if corner == "bottom-right":
+        x, y = base_width - qr_side_px - margin_px, base_height - qr_side_px - margin_px
+    elif corner == "bottom-left":
+        x, y = margin_px, base_height - qr_side_px - margin_px
+    elif corner == "top-right":
+        x, y = base_width - qr_side_px - margin_px, margin_px
+    else:  # Default to 'top-left'
+        x, y = margin_px, margin_px
 
-    # QR binário (sem borda)
-    qr_img = generate_qr_image(qr_content, border=0, error_correction=ERROR_CORRECT_M)
-    qr_resized = qr_img.resize((side, side), resample=Image.NEAREST)
+    # --- 2. Extract the patch from the image where the QR code will be placed ---
+    patch = base_image.crop((x, y, x + qr_side_px, y + qr_side_px))
 
-    # --- BACKGROUND translúcido (40%) apenas no quadrado do QR ---
+    # --- 3. Intelligently find colors from the image patch ---
+    # Find a sub-region (tile) with high texture/contrast within the patch
+    tile_px = max(16, int(qr_side_px * tile_ratio))
+    texture_tile = _find_best_texture_tile(patch, tile_px)
+
+    # Calculate the average luminance of the entire patch to help pick a contrasting color
+    patch_avg_lum = _get_relative_luminance(ImageOps.fit(patch.convert("RGB"), (1, 1), Image.Resampling.BOX).getpixel((0, 0)))
+
+    # Pick the color for the QR modules (from the tile) that most contrasts with the patch's average
+    module_color_rgb = _pick_high_contrast_color(texture_tile, patch_avg_lum)
+
+    # Pick a color for the QR background (from the patch) that contrasts with the module color
+    background_color_rgb = _get_contrasting_color_from_patch(patch, module_color_rgb, tile=texture_tile)
+
+    # Ensure the contrast between the two colors meets the scannability minimum
+    background_color_rgb = _ensure_min_contrast(module_color_rgb, background_color_rgb, min_ratio=min_contrast)
+
+    # --- 4. Generate the base QR code image ---
+    qr_img_binary = generate_qr_image(qr_content, border=0, error_correction=ERROR_CORRECT_M)
+    qr_resized = qr_img_binary.resize((qr_side_px, qr_side_px), resample=Image.Resampling.NEAREST)
+
+    # --- 5. Create the stylized background layer ---
+    # Create a solid color background with the defined opacity
     bg_alpha = int(max(0.0, min(1.0, bg_opacity)) * 255)
-    bg_layer = Image.new("RGBA", (side, side), (bg_rgb[0], bg_rgb[1], bg_rgb[2], bg_alpha))
-    final_qr_area = Image.alpha_composite(patch, bg_layer)  # patch permanece sem “efeitos”
+    bg_layer = Image.new("RGBA", (qr_side_px, qr_side_px), (*background_color_rgb, bg_alpha))
 
-    # ============================
-    # MÓDULOS PRETOS (80% alpha)
-    #   1) ruído multiplicativo (luminância)
-    #   2) ruído cromático de contraste usando bg_rgb
-    # ============================
+    # Composite the translucent background over the original image patch
+    final_qr_area = Image.alpha_composite(patch, bg_layer)
 
-    # 1) base colorida + ruído multiplicativo
-    base_color_rgb = Image.new("RGB", (side, side), solid_color[:3])
+    # --- 6. Create the QR module layer with noise and texture ---
+    # a) Start with a solid color base for the modules
+    module_color_base = Image.new("RGB", (qr_side_px, qr_side_px), module_color_rgb)
 
-    gain = _make_gain_map((side, side), amount=noise_amount)  # L (0..255) mapeado para ganho
-    gain_rgb = Image.merge("RGB", (gain, gain, gain))
-    noisy_rgb = ImageChops.multiply(base_color_rgb, gain_rgb)  # granulação luminosa
+    # b) Add luminance noise (grain effect)
+    gain_map = _make_gain_map((qr_side_px, qr_side_px), amount=noise_amount)
+    gain_map_rgb = Image.merge("RGB", (gain_map, gain_map, gain_map))
+    modules_with_luminance_noise = ImageChops.multiply(module_color_base, gain_map_rgb)
 
-    # 2) ruído cromático com a cor de background (aumenta micro-contraste)
-    #    cria máscara de mistura a partir de um ruído bruto e baixa intensidade
-    try:
-        raw_noise = Image.effect_noise((side, side), 64.0).convert("L")  # gaussian
-    except Exception:
-        raw_noise = Image.new("L", (side, side))
-        raw_noise.putdata([random.randint(0, 255) for _ in range(side * side)])
-
-    mix_s = max(0.0, min(1.0, color_contrast_amount))
-    # máscara fraca (0..255*mix_s); invertida para manter a cor base predominante
-    mix_mask = raw_noise.point(lambda v: int(v * mix_s))
+    # c) Add chromatic noise (sprinkles of the background color) for better blending
+    # Create a noise mask to blend the colors
+    noise_mask = _create_noise_image((qr_side_px, qr_side_px)).convert("L")
+    mix_strength = max(0.0, min(1.0, color_contrast_amount))
+    # The mask is weak and inverted, so the module color remains dominant
+    mix_mask = noise_mask.point(lambda v: int(v * mix_strength))
     mix_mask = ImageOps.invert(mix_mask)
 
-    bg_tint_rgb = Image.new("RGB", (side, side), bg_rgb)
-    # mistura pontilhada: predominantemente a cor do módulo, com sprinkles da cor do BG
-    noisy_contrast_rgb = Image.composite(noisy_rgb, bg_tint_rgb, mix_mask)
+    # Create a layer with the background color to be "sprinkled" in
+    bg_tint_layer = Image.new("RGB", (qr_side_px, qr_side_px), background_color_rgb)
 
-    # converte para RGBA para aplicar a máscara dos módulos com opacidade 80%
-    color_layer = noisy_contrast_rgb.convert("RGBA")
+    # Blend the grainy module color with the background color using the noise mask
+    modules_with_full_noise = Image.composite(modules_with_luminance_noise, bg_tint_layer, mix_mask)
 
-    modules_mask = ImageOps.invert(qr_resized.convert("L"))   # 255 onde o QR é preto
-    alpha = max(0.0, min(1.0, opacity))
-    mask_alpha = modules_mask.point(lambda p: int(p * alpha))
+    # Convert to RGBA to apply the final opacity
+    final_module_layer = modules_with_full_noise.convert("RGBA")
 
-    # aplica somente nos módulos pretos, em cima do background
-    final_qr_area.paste(color_layer, (0, 0), mask=mask_alpha)
+    # --- 7. Assemble the final QR code ---
+    # Create a mask from the QR code pattern (white where modules should appear)
+    qr_pattern_mask = ImageOps.invert(qr_resized.convert("L"))
 
-    # compõe de volta no canto escolhido
-    base.alpha_composite(final_qr_area, dest=(x, y))
-    out = ensure_unique_filename(SAVED_DIR / f"{base_image_path.stem}_qr_color_noise_bg_contrast.png")
-    base.convert("RGB").save(out, "PNG")
-    return out
+    # Adjust the mask's opacity
+    module_alpha = max(0.0, min(1.0, opacity))
+    final_mask = qr_pattern_mask.point(lambda p: int(p * module_alpha))
 
-def _make_gain_map(size, amount=0.10):
-    """
-    Gera um mapa de ganho (L 0..255) para ruído multiplicativo.
-    amount ~ intensidade do ruído (0.05–0.20 recomendado).
-    """
+    # "Paint" the textured modules onto the QR area, using the QR pattern as a mask
+    final_qr_area.paste(final_module_layer, (0, 0), mask=final_mask)
+
+    # --- 8. Composite the finished QR code back onto the base image ---
+    base_image.alpha_composite(final_qr_area, dest=(x, y))
+
+    # Save the final image
+    output_path = ensure_unique_filename(SAVED_DIR / f"{base_image_path.stem}_watermarked.png")
+    base_image.convert("RGB").save(output_path, "PNG")
+    return output_path
+
+# ==============================================================================
+# Helper Functions (with documentation)
+# ==============================================================================
+
+def _create_noise_image(size: tuple[int, int]) -> Image.Image:
+    """Generates a Gaussian or simple random noise image."""
     w, h = size
-    # tenta usar effect_noise (se existir); senão cai no aleatório puro
     try:
-        noise = Image.effect_noise((w, h), 64.0)
+        # Try the faster, higher-quality method if available
+        return Image.effect_noise((w, h), 64.0)
     except Exception:
+        # Fallback to pixel-by-pixel noise if the above fails
         noise = Image.new("L", (w, h))
-        noise.putdata([random.randint(0, 255) for _ in range(w * h)])
+        noise.putdata([randint(0, 255) for _ in range(w * h)])
+        return noise
 
-    # mapeia o ruído [0..255] p/ um ganho em torno de 1.0:
-    # gain = 1 + amount * ((v - 128)/128)  ⇒  depois escala para [0..255]
+def _make_gain_map(size: tuple[int, int], amount: float = 0.10) -> Image.Image:
+    """
+    Creates a multiplicative noise map to simulate film grain.
+
+    Args:
+        size: The (width, height) dimensions of the map.
+        amount: The intensity of the noise (0.05–0.20 is a good range).
+
+    Returns:
+        A grayscale ('L') image where each pixel represents a gain factor.
+    """
+    noise = _create_noise_image(size)
+
+    # Maps the noise [0..255] to a gain factor around 1.0.
+    # E.g., for amount=0.1, the gain will vary from 0.9 to 1.1.
+    # The result is rescaled to [0..255] to be applied via `ImageChops.multiply`.
     table = []
     for v in range(256):
         factor = 1.0 + amount * ((v - 128) / 128.0)
-        factor = max(0.0, min(2.0, factor))
+        factor = max(0.0, min(2.0, factor))  # Clamp extreme values
         table.append(int(round(factor * 255)))
     return noise.point(table, mode="L")
 
-def _rel_luminance(rgb):  # rgb = (0..255)
+def _get_relative_luminance(rgb: tuple[int, int, int]) -> float:
+    """Calculates the relative luminance (perceived brightness) of an RGB color."""
     r, g, b = [v / 255.0 for v in rgb]
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
+def _get_contrast_ratio(rgb1: tuple[int, int, int], rgb2: tuple[int, int, int]) -> float:
+    """Calculates the WCAG contrast ratio between two RGB colors."""
+    l1 = _get_relative_luminance(rgb1)
+    l2 = _get_relative_luminance(rgb2)
+    if l1 < l2:
+        l1, l2 = l2, l1  # Ensure l1 is the lighter color
+    return (l1 + 0.05) / (l2 + 0.05)
+
 def _find_best_texture_tile(patch: Image.Image, tile_px: int) -> Image.Image:
+    """
+    Finds a sub-region (tile) within an image patch that has the most
+    "texture" (edges/details).
+    """
     gray = patch.convert("L")
     edges = gray.filter(ImageFilter.FIND_EDGES)
+
+    # Downsample the edge map to a grid to find the most intense cell
     w, h = edges.size
-    gw, gh = max(1, w // tile_px), max(1, h // tile_px)
-    agg = edges.resize((gw, gh), resample=Image.BOX)
-    arr = list(agg.getdata())
-    k = arr.index(max(arr))
-    cx, cy = k % gw, k // gw
+    grid_w, grid_h = max(1, w // tile_px), max(1, h // tile_px)
+    agg = edges.resize((grid_w, grid_h), resample=Image.Resampling.BOX)
+
+    # Find the index of the "brightest" cell (the one with the most edges)
+    edge_data = list(agg.getdata())
+    max_edge_index = edge_data.index(max(edge_data))
+
+    # Convert the index back to coordinates and crop the tile from the original image
+    cx, cy = max_edge_index % grid_w, max_edge_index // grid_w
     x0, y0 = min(w - tile_px, cx * tile_px), min(h - tile_px, cy * tile_px)
     return patch.crop((x0, y0, x0 + tile_px, y0 + tile_px))
 
-def _contrasting_color_from_patch(
+def _get_contrasting_color_from_patch(
         patch: Image.Image,
-        avoid_rgb,                 # cor do QR (r,g,b[,a])
-        scope: str = "tile",       # "tile" usa o melhor sub-bloco; "patch" usa o patch todo
+        avoid_rgb: tuple[int, int, int],
         tile: Image.Image | None = None,
-        sat_floor: float = 0.40,   # saturação mínima
-        sample_size: int = 64      # downsample p/ acelerar a varredura
-):
+        sat_floor: float = 0.40,
+) -> tuple[int, int, int]:
     """
-    Escolhe uma cor *do próprio patch* que maximize o contraste contra `avoid_rgb`.
-    Se scope="tile" e `tile` vier preenchido, varre o tile; senão varre o patch inteiro.
+    Scans an image area (patch or tile) to find the color that maximizes
+    contrast against a color to be avoided (`avoid_rgb`).
+
+    Args:
+        patch: The larger image piece.
+        avoid_rgb: The color to contrast against (usually the QR module color).
+        tile: An optional high-texture sub-region to prioritize the search.
+        sat_floor: Minimum saturation for the resulting color, to avoid grays.
+
+    Returns:
+        The found RGB color tuple.
     """
-    src = tile if (scope == "tile" and tile is not None) else patch
-    img = src.resize((sample_size, sample_size), Image.BOX).convert("RGB")
+    src_image = tile if tile is not None else patch
+    img_sample = src_image.resize((64, 64), Image.Resampling.BOX).convert("RGB")
 
     best_rgb, best_score = (0, 0, 0), -1.0
-    for rgb in img.getdata():
-        cr = _contrast_ratio(rgb, avoid_rgb)
-        # bônus leve por saturação para evitar acinzentado que “sujaria” o véu
+    for rgb in img_sample.getdata():
+        cr = _get_contrast_ratio(rgb, avoid_rgb)
+        # Bonus for saturation to prefer more vivid colors
         h, s, v = colorsys.rgb_to_hsv(*(c / 255.0 for c in rgb))
         score = cr + 0.12 * s
         if score > best_score:
             best_rgb, best_score = rgb, score
 
-    # garante saturação mínima, mas *sem* alterar brilho global
+    # Ensure a minimum saturation without altering brightness, to avoid "washed out" colors
     h, s, v = colorsys.rgb_to_hsv(*(c / 255.0 for c in best_rgb))
     s = max(s, sat_floor)
-    rr, gg, bb = [int(round(x * 255)) for x in colorsys.hsv_to_rgb(h, s, v)]
-    return (rr, gg, bb)
+    r, g, b = [int(round(x * 255)) for x in colorsys.hsv_to_rgb(h, s, v)]
+    return (r, g, b)
 
-def _pick_high_contrast_color(tile: Image.Image, patch_avg_lum: float):
-    # escolhe a cor do próprio tile que mais difere na luminância do patch
-    t = tile.resize((64, 64), Image.BOX).convert("RGB")
+def _pick_high_contrast_color(tile: Image.Image, patch_avg_lum: float) -> tuple[int, int, int]:
+    """
+    Picks the color from the `tile` that differs most in brightness from the
+    average luminance of the entire `patch`.
+    """
+    t = tile.resize((64, 64), Image.Resampling.BOX).convert("RGB")
     best_rgb, best_score = (0, 0, 0), -1.0
     for rgb in t.getdata():
-        L = _rel_luminance(rgb)
-        score = abs(L - patch_avg_lum)
+        lum = _get_relative_luminance(rgb)
+        score = abs(lum - patch_avg_lum)
         if score > best_score:
             best_rgb, best_score = rgb, score
-    return (best_rgb[0], best_rgb[1], best_rgb[2], 255)
+    return best_rgb
 
-def _contrast_ratio(rgb1, rgb2):
-    L1 = _rel_luminance(rgb1[:3])
-    L2 = _rel_luminance(rgb2[:3])
-    if L1 < L2:
-        L1, L2 = L2, L1
-    return (L1 + 0.05) / (L2 + 0.05)
-
-def _tune_v(rgb, new_v):
-    """Retorna rgb com o mesmo H/S e V ajustado para new_v (0..1)."""
-    r, g, b = [c / 255.0 for c in rgb[:3]]
-    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+def _tune_color_brightness(rgb: tuple[int, int, int], new_v: float) -> tuple[int, int, int]:
+    """Adjusts a color's brightness (HSV Value), keeping Hue and Saturation."""
+    h, s, v = colorsys.rgb_to_hsv(*(c / 255.0 for c in rgb))
     v = max(0.0, min(1.0, new_v))
-    rr, gg, bb = [int(round(x * 255)) for x in colorsys.hsv_to_rgb(h, s, v)]
-    return (rr, gg, bb)
+    r, g, b = [int(round(x * 255)) for x in colorsys.hsv_to_rgb(h, s, v)]
+    return (r, g, b)
 
-def _ensure_min_contrast_bg(fg_rgb, bg_rgb, min_ratio=2.8, max_steps=12):
+def _ensure_min_contrast(
+        fg_rgb: tuple[int, int, int],
+        bg_rgb: tuple[int, int, int],
+        min_ratio: float = 2.8,
+        max_steps: int = 12
+) -> tuple[int, int, int]:
     """
-    Se contraste(fg,bg) < min_ratio, empurra o *background*:
-      - se bg é mais escuro que fg => escurece ainda mais o bg (v ↓)
-      - se bg é mais claro que fg  => clareia ainda mais o bg (v ↑)
-    Mantém hue/saturação do bg.
+    Adjusts the background color's (`bg_rgb`) brightness to ensure it has
+    a minimum contrast with the foreground color (`fg_rgb`).
+
+    If the background is darker than the foreground, it makes it even darker.
+    If it's lighter, it makes it even lighter, preserving hue and saturation.
     """
-    fgL = _rel_luminance(fg_rgb)
-    bgL = _rel_luminance(bg_rgb)
-    if _contrast_ratio(fg_rgb, bg_rgb) >= min_ratio:
+    if _get_contrast_ratio(fg_rgb, bg_rgb) >= min_ratio:
         return bg_rgb
 
-    # trabalha no canal V (HSV) para preservar cor
-    r, g, b = [c / 255.0 for c in bg_rgb]
-    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    fg_lum = _get_relative_luminance(fg_rgb)
+    bg_lum = _get_relative_luminance(bg_rgb)
 
-    # direção: afasta o bg do fg
-    make_bg_darker = (bgL < fgL)  # bg já é mais escuro -> empurra mais p/ escuro
-    # passos progressivos (crescentes) para convergir rápido
+    h, s, v = colorsys.rgb_to_hsv(*(c / 255.0 for c in bg_rgb))
+
+    # Determine whether to lighten or darken the background to increase contrast
+    make_bg_darker = bg_lum < fg_lum
+
+    # Iteratively adjust brightness until the desired contrast is met
     for i in range(1, max_steps + 1):
-        step = 0.06 + 0.02 * i      # 0.08 → ~0.30 ao longo das iterações
-        vv = v * (1.0 - step) if make_bg_darker else v + (1.0 - v) * step
-        cand = _tune_v(bg_rgb, vv)
-        if _contrast_ratio(fg_rgb, cand) >= min_ratio:
-            return cand
-        v = vv
-    return _tune_v(bg_rgb, v)
+        step_size = 0.06 + 0.02 * i  # Steps get larger to converge faster
 
+        if make_bg_darker:
+            new_v = v * (1.0 - step_size)
+        else:
+            new_v = v + (1.0 - v) * step_size
+
+        candidate_bg = _tune_color_brightness(bg_rgb, new_v)
+
+        if _get_contrast_ratio(fg_rgb, candidate_bg) >= min_ratio:
+            return candidate_bg
+        v = new_v  # Update brightness for the next iteration
+
+    return _tune_color_brightness(bg_rgb, v)

@@ -3,7 +3,8 @@ import os
 from utils.utils import prompt, APP_NAME
 from actions import (
     action_add_watermark_qr,
-    action_watermark_with_media_link
+    action_watermark_with_media_link,
+    action_create_mindar_live_photo   # novo MindAR
 )
 from local_server import stop_local_server, start_local_server
 
@@ -15,21 +16,24 @@ def print_menu():
     print("\n" + "=" * 50)
     print(f"{APP_NAME}")
     print("=" * 50)
-    print("1) Add a memory to image")
-    print("2) Add QR Code to an image")
+    # print("1) Create 'Live Photo' with WebAR (AR.js - legado)")
+    print("2) Add a memory to image")
+    print("3) Add QR Code to an image")
+    print("4) Create 'Live Photo' with MindAR (.mind)")
     print("0) Exit")
     print("-" * 50)
 
 def main():
     actions = {
-        "2": action_add_watermark_qr,
-        "1": action_watermark_with_media_link,
+        "2": action_watermark_with_media_link,
+        "3": action_add_watermark_qr,
+        "4": action_create_mindar_live_photo,   # novo
     }
     try:
+        # já liga o servidor que serve /public (estático)
         start_local_server()
 
         while True:
-            clear_screen()
             print_menu()
             choice = prompt("Choose an option: ").strip()
 

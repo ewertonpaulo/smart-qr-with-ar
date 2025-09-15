@@ -1,0 +1,14 @@
+{
+  "name": "mindar-offline-compiler",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Compile .mind (MindAR) offline no Node usando OfflineCompiler + node-canvas",
+  "scripts": {
+    "compile": "node compile-offline.mjs"
+  },
+  "dependencies": {
+    "canvas": "^2.11.2",
+    "mind-ar": "github:hiukim/mind-ar-js#v1.2.5"
+  }
+}

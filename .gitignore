@@ -4,3 +4,4 @@ __pycache__
 public
 saved
 *.png
+**/node_modules/
