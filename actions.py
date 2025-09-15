@@ -7,6 +7,16 @@ from utils.utils import prompt, validate_file_exists, ensure_unique_filename, ge
 from utils.image_utils import add_qr_watermark
 from local_server import MEDIA_SUBDIR, get_port
 
+def _get_position_from_input(user_input: str) -> str:
+    """Converts numeric input to a corner string."""
+    mapping = {
+        "1": "top-left",
+        "2": "top-right",
+        "3": "bottom-left",
+        "4": "bottom-right",
+    }
+    return mapping.get(user_input, "bottom-right")
+
 def action_add_watermark_qr():
     try:
         base_path = Path(validate_file_exists(prompt("Full path to the base image: ").strip()))
@@ -17,7 +27,8 @@ def action_add_watermark_qr():
     content = prompt("Content for the QR Code: ").strip()
     if not content: return
 
-    position = prompt("Position (top-left/right, bottom-left/right) [bottom-right]: ").strip() or "bottom-right"
+    pos_input = prompt("Position (1: top-left, 2: top-right, 3: bottom-left, 4: bottom-right) [4]: ").strip() or "4"
+    position = _get_position_from_input(pos_input)
     params = {"size": 0.15, "margin": 0.02}
 
     try:
@@ -50,7 +61,8 @@ def action_watermark_with_media_link():
         ip = get_local_ip()
         url = f"http://{ip}:{port}/{dest_path.relative_to(MEDIA_SUBDIR.parent).as_posix()}"
 
-        position = prompt("Position (top-left/right, bottom-left/right) [bottom-right]: ").strip() or "bottom-right"
+        pos_input = prompt("Position (1: top-left, 2: top-right, 3: bottom-left, 4: bottom-right) [4]: ").strip() or "4"
+        position = _get_position_from_input(pos_input)
         params = {"size": 0.15, "margin": 0.02}
 
         print("\nApplying QR Code watermark...")
@@ -64,30 +76,30 @@ def action_watermark_with_media_link():
 
 def action_create_mindar_live_photo():
     """
-    Cria 'Live Photo' com MindAR (image tracking) usando arquivo .mind.
-    1) Gera .mind a partir da imagem base
-    2) Copia .mind e o vídeo para /public/media
-    3) Gera página HTML (template_mindar.html)
-    4) Aplica QR na imagem base com link para a página
+    Creates a 'Live Photo' with MindAR (image tracking) using a .mind file.
+    1) Generates .mind from the base image
+    2) Copies .mind and the video to /public/media
+    3) Generates an HTML page (template_mindar.html)
+    4) Applies a QR code to the base image with a link to the page
     """
     try:
-        print("\n--- Criando uma Experiência 'Live Photo' com MindAR (Automatizado) ---")
+        print("\n--- Creating a 'Live Photo' Experience with MindAR (Automated) ---")
 
-        base_image_path = Path(validate_file_exists(prompt("Caminho completo para a imagem base (alvo): ").strip()))
-        video_path = Path(validate_file_exists(prompt("Caminho para o vídeo a ser vinculado: ").strip()))
+        base_image_path = Path(validate_file_exists(prompt("Full path to the base image (target): ").strip()))
+        video_path = Path(validate_file_exists(prompt("Path to the video to be linked: ").strip()))
     except FileNotFoundError as e:
-        print(f"Erro de arquivo: {e}")
+        print(f"File error: {e}")
         return
 
     mind_file = generate_mind_file(base_image_path)
     if not mind_file:
-        print("Criação cancelada: falha ao gerar o arquivo .mind.")
+        print("Creation canceled: failed to generate the .mind file.")
         return
 
     try:
         MEDIA_SUBDIR.mkdir(parents=True, exist_ok=True)
 
-        # copia mídia e mind
+        # copy media and mind file
         video_dest_path = ensure_unique_filename(MEDIA_SUBDIR / video_path.name)
         shutil.copy2(str(video_path), str(video_dest_path))
 
@@ -102,33 +114,34 @@ def action_create_mindar_live_photo():
 
         template_path = Path("template_mind_ar.html")
         if not template_path.exists():
-            print(f"ERRO: O arquivo de modelo '{template_path}' não foi encontrado!")
+            print(f"ERROR: The template file '{template_path}' was not found!")
             return
 
         html_content = template_path.read_text(encoding='utf-8')
         html_content = html_content.replace("__VIDEO_URL__", video_url)
         html_content = html_content.replace("__MIND_FILE_URL__", mind_url)
 
-        final_html_name = f"mindar_{build_safe_name(base_image_path, code_len=6)}.html"
+        final_html_name = f"{build_safe_name(base_image_path, code_len=6)}.html"
         final_html_path = MEDIA_SUBDIR.parent / final_html_name
         final_html_path.write_text(html_content, encoding='utf-8')
 
         # ar_page_url = f"http://{ip}:{port}/{final_html_name}"
-        ar_page_url = f"https://1880014aaa80.ngrok-free.app/{final_html_name}"
+        ar_page_url = f"https://867bcdf3a993.ngrok-free.app/{final_html_name}"
 
-        position = prompt("\nPosição do QR Code (top-left/right, bottom-left/right) [bottom-right]: ").strip() or "bottom-right"
+        pos_input = prompt("\nQR Code Position (1: top-left, 2: top-right, 3: bottom-left, 4: bottom-right) [4]: ").strip() or "4"
+        position = _get_position_from_input(pos_input)
         params = {"size": 0.20, "margin": 0.02}
 
-        print("\nAplicando QR Code que leva para a experiência MindAR...")
+        print("\nApplying QR Code that links to the MindAR experience...")
         out_path = add_qr_watermark(base_image_path, ar_page_url, corner=position, size=params['size'], margin=params['margin'])
 
-        print("\n✅ Sucesso! Experiência MindAR criada.")
-        print(f"Imagem com QR Code salva em: {out_path}")
-        print(f"URL da experiência: {ar_page_url}")
-        print("\n=== INSTRUÇÕES ===")
-        print("  1) Abra o link no celular e permita o uso da CÂMERA.")
-        print("  2) Aponte para a imagem base para ver o vídeo sobreposto.")
-        print("  (iOS exige HTTPS fora do localhost).")
+        print("\n✅ Success! MindAR experience created.")
+        print(f"Image with QR Code saved to: {out_path}")
+        print(f"Experience URL: {ar_page_url}")
+        print("\n=== INSTRUCTIONS ===")
+        print("  1) Open the link on your phone and allow CAMERA access.")
+        print("  2) Point it at the base image to see the video overlay.")
+        print("  (iOS requires HTTPS outside of localhost).")
 
     except Exception as e:
-        print(f"Ocorreu um erro inesperado durante o processo: {e}")
+        print(f"An unexpected error occurred during the process: {e}")

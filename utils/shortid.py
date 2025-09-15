@@ -6,7 +6,7 @@ from typing import Union
 ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 def _slugify(text: str, max_len: int = 32) -> str:
-    # remove acentos, baixa, troca espaços por '-', remove o que não for [a-z0-9-]
+    # remove accents, lowercase, replace spaces with '-', remove anything not [a-z0-9-]
     text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     text = text.lower().strip()
@@ -16,7 +16,7 @@ def _slugify(text: str, max_len: int = 32) -> str:
     return text[:max_len] or "file"
 
 def random_code(length: int = 9, alphabet: str = ALPHABET) -> str:
-    # cada char escolhido com entropia ~log2(62)=5.95 bits. 9 chars ~53.6 bits
+    # each char chosen with entropy ~log2(62)=5.95 bits. 9 chars ~53.6 bits
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 def _int_to_base62(n: int) -> str:
@@ -45,11 +45,11 @@ def build_safe_name(
         include_slug: bool = False
 ) -> str:
     """
-    Retorna um nome curto e único, p.ex.: 'aB3fK9qP.jpg' ou 'banner-aB3fK9qP.jpg'
+    Returns a short and unique name, e.g.: 'aB3fK9qP.jpg' or 'banner-aB3fK9qP.jpg'
     mode:
-      - "rand":      só aleatório (rápido)
-      - "hash":      determinístico pelo conteúdo (mesmo arquivo => mesmo código)
-      - "hash+rand": mistura hash do conteúdo com aleatório (ótimo equilíbrio)
+      - "rand": random only (fast)
+      - "hash": deterministic by content (same file => same code)
+      - "hash+rand": mixes content hash with random (great balance)
     """
     p = Path(source)
     ext = p.suffix.lower()
