@@ -111,7 +111,8 @@ def action_create_ar_live_photo():
         final_html_path = MEDIA_SUBDIR.parent / final_html_name
         final_html_path.write_text(html_content, encoding='utf-8')
 
-        # TODO: replace with server your own ngrok url, https is needed"
+        # TODO: Replace with your own ngrok URL (HTTPS is required).
+        # For future implementation: The shorter the generated URL, the better for QR codes.
         ar_page_url = f"https://867bcdf3a993.ngrok-free.app/{final_html_name}"
 
         pos_input = prompt("\nQR Code Position (1: top-left, 2: top-right, 3: bottom-left, 4: bottom-right) [4]: ").strip() or "4"
