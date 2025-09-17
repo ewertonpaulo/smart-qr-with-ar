@@ -1,0 +1,68 @@
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+
+        <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+        <script src="https://unpkg.com/aframe-chromakey-material/dist/aframe-chromakey-material.min.js"></script>
+    </head>
+    <body>
+        <a-scene
+                mindar-image="imageTargetSrc: __MIND_FILE_URL__;"
+                renderer="colorManagement: true; physicallyCorrectLights: true"
+                vr-mode-ui="enabled: false"
+                device-orientation-permission-ui="enabled: false"
+                embedded
+        >
+            <a-assets>
+                <video id="Bunny"
+                       src="__VIDEO_URL__"
+                       loop="true"
+                       autoplay
+                       muted="true"
+                       playsinline
+                       webkit-playsinline
+                       crossorigin="anonymous"></video>
+            </a-assets>
+
+            <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+            <a-entity id="target" mindar-image-target="targetIndex: 0">
+                <a-video id="videoPlane"
+                         shader="chromakey"
+                         color="0.1 0.9 0.2"
+                         src="#Bunny"
+                         width="1"
+                         height="0.5625"
+                         position="0 0 0"></a-video>
+            </a-entity>
+        </a-scene>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const video = document.querySelector('#Bunny');
+                const plane = document.querySelector('#videoPlane');
+                const target = document.querySelector('#target');
+
+                const applyAR = () => {
+                    const w = video.videoWidth || 0, h = video.videoHeight || 0;
+                    if (w > 0 && h > 0) {
+                        const ratio = h / w;
+                        plane.setAttribute('width', 1);
+                        plane.setAttribute('height', ratio);
+                    }
+                };
+                video.addEventListener('loadedmetadata', applyAR);
+
+                target.addEventListener('targetFound', () => {
+                    video.play().catch(() => {});
+                });
+                target.addEventListener('targetLost', () => {
+                    video.pause();
+                });
+            });
+        </script>
+    </body>
+</html>

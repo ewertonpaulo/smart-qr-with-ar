@@ -39,3 +39,12 @@ def get_local_ip() -> str:
             return s.getsockname()[0]
     except Exception:
         return "127.0.0.1"
+
+def _get_position_from_input(user_input: str) -> str:
+    mapping = {
+        "1": "top-left",
+        "2": "top-right",
+        "3": "bottom-left",
+        "4": "bottom-right",
+    }
+    return mapping.get(user_input, "bottom-right")

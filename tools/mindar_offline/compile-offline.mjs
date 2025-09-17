@@ -1,4 +1,3 @@
-// tools/mindar_offline/compile-offline.mjs
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,23 +6,16 @@ import { loadImage } from 'canvas';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Importa OfflineCompiler a partir do pacote 'mind-ar' (repo GitHub)
 async function importOfflineCompiler() {
-    const candidates = [
-        'mind-ar/src/image-target/offline-compiler.js',
-        'mind-ar-js/src/image-target/offline-compiler.js' // fallback, se o alias/pacote variar
-    ];
-    let lastErr = null;
-    for (const c of candidates) {
-        try {
-            const mod = await import(c);
-            if (mod?.OfflineCompiler) return mod.OfflineCompiler;
-        } catch (e) { lastErr = e; }
+    try {
+        const { OfflineCompiler } = await import('mind-ar/src/image-target/offline-compiler.js');
+        return OfflineCompiler;
+    } catch (e) {
+        console.error('Failed to import OfflineCompiler from your fork.', e);
+        throw new Error(
+            'Could not load OfflineCompiler. Check if the "mind-ar" package is installed correctly.'
+        );
     }
-    throw new Error(
-        'Falha ao importar OfflineCompiler. Confirme a dependência "mind-ar" (via GitHub) e se expõe src/image-target/offline-compiler.js.\n' +
-        (lastErr ? `Último erro: ${String(lastErr)}` : '')
-    );
 }
 
 function parseArgs(argv) {
@@ -48,7 +40,6 @@ function parseArgs(argv) {
 async function loadImages(paths) {
     const imgs = [];
     for (const p of paths) {
-        // node-canvas: caminho é relativo ao CWD onde o Node foi executado (igual ao exemplo do repo)
         const img = await loadImage(p);
         imgs.push(img);
     }
@@ -64,22 +55,21 @@ async function loadImages(paths) {
     const compiler = new OfflineCompiler();
 
     if (isSingleMind) {
-        // Importa um .mind existente e reexporta (útil p/ validar/inspecionar)
         const buf = fs.readFileSync(inputs[0]);
         const arrBuf = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
         compiler.importData(arrBuf);
     } else {
         const images = await loadImages(inputs);
         await compiler.compileImageTargets(images, (p) => {
-            process.stdout.write(`\rProgresso: ${p.toFixed(2)}%   `);
+            process.stdout.write(`\rProgress: ${p.toFixed(2)}%   `);
         });
     }
 
-    const out = compiler.exportData(); // ArrayBuffer/Buffer
+    const out = compiler.exportData();
     const outBuf = Buffer.isBuffer(out) ? out : Buffer.from(new Uint8Array(out));
     fs.writeFileSync(output, outBuf);
-    process.stdout.write(`\n✅ .mind gerado: ${path.resolve(output)}\n`);
+    process.stdout.write(`\n✅ .mind generated: ${path.resolve(output)}\n`);
 })().catch((err) => {
-    console.error('\n❌ Erro ao compilar .mind:', err?.stack || err);
+    console.error('\n❌ Failed to generate the .mind file:', err?.stack || err);
     process.exit(1);
 });

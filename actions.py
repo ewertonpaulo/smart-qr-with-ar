@@ -1,21 +1,11 @@
 import shutil
 from pathlib import Path
 
-from utils.ar_utils import generate_mind_file, _create_fhd_version_if_needed
+from utils.ar_utils import generate_mind_file, _create_img_light_version_if_needed
 from utils.shortid import build_safe_name
-from utils.utils import prompt, validate_file_exists, ensure_unique_filename, get_local_ip
+from utils.utils import prompt, validate_file_exists, ensure_unique_filename, get_local_ip, _get_position_from_input
 from utils.image_utils import add_qr_watermark
 from local_server import MEDIA_SUBDIR, get_port
-
-def _get_position_from_input(user_input: str) -> str:
-    """Converts numeric input to a corner string."""
-    mapping = {
-        "1": "top-left",
-        "2": "top-right",
-        "3": "bottom-left",
-        "4": "bottom-right",
-    }
-    return mapping.get(user_input, "bottom-right")
 
 def action_add_watermark_qr():
     try:
@@ -29,16 +19,15 @@ def action_add_watermark_qr():
 
     pos_input = prompt("Position (1: top-left, 2: top-right, 3: bottom-left, 4: bottom-right) [4]: ").strip() or "4"
     position = _get_position_from_input(pos_input)
-    params = {"size": 0.15, "margin": 0.02}
 
     try:
-        print("\nApplying standard watermark...")
+        print("\nApplying QR Code...")
         out_path = add_qr_watermark(base_path, content, corner=position)
-        print(f"Standard watermark applied. Image saved to: {out_path}")
+        print(f"QR Code applied. Image saved to: {out_path}")
     except Exception as e:
-        print(f"Failed to apply watermark: {e}")
+        print(f"Failed to apply QR Code: {e}")
 
-def action_watermark_with_media_link():
+def action_add_memory_qr():
     try:
         base_path = Path(validate_file_exists(prompt("Full path to the base image: ").strip()))
     except FileNotFoundError as e:
@@ -46,7 +35,7 @@ def action_watermark_with_media_link():
         return
 
     try:
-        local_path = Path(validate_file_exists(prompt("Path to the media file to be linked (image/video): ").strip()))
+        local_path = Path(validate_file_exists(prompt("Path to the media file to be linked: ").strip()))
     except FileNotFoundError as e:
         print(f"Error: {e}")
         return
@@ -68,27 +57,27 @@ def action_watermark_with_media_link():
         add_qr_watermark(base_path, url, corner=position)
 
         print(f"\nSuccess!")
-        print(f"Local server is active. Scan the QR on the image to access the media file at http://{ip}:{port}/")
+        print(f"Scan the QR on the image to access the media file at http://{ip}:{port}/")
 
     except Exception as e:
         print(f"An error occurred during the process: {e}")
 
-def action_create_mindar_live_photo():
+def action_create_ar_live_photo():
     """
-    Creates a 'Live Photo' with MindAR (image tracking) using a .mind file.
+    Creates a 'Live Photo' with AR (image tracking) using a .mind file.
     1) Generates .mind from the base image directly into /public/media
     2) Copies the video to /public/media
-    3) Generates an HTML page (template_mindar.html)
-    4) Applies a QR code to the base image with a link to the page
+    3) Generates an HTML page from (template_ar.html) and copies to /public
+    4) Applies a QR code to the base image with a link to template_ar created
     """
     resized_image_path = None
     try:
-        print("\n--- Creating a 'Live Photo' Experience with MindAR (Automated) ---")
+        print("\n--- Creating a 'Live Photo' Experience with AR ---")
 
-        base_image_path = Path(validate_file_exists(prompt("Full path to the base image (target): ").strip()))
+        base_image_path = Path(validate_file_exists(prompt("Full path to the base image: ").strip()))
         video_path = Path(validate_file_exists(prompt("Path to the video to be linked: ").strip()))
 
-        resized_image_path = _create_fhd_version_if_needed(base_image_path)
+        resized_image_path = _create_img_light_version_if_needed(base_image_path)
 
         MEDIA_SUBDIR.mkdir(parents=True, exist_ok=True)
         mind_filename = resized_image_path.with_suffix(".mind").name
@@ -109,7 +98,7 @@ def action_create_mindar_live_photo():
         video_url = f"{MEDIA_SUBDIR.name}/{video_dest_path.name}"
         mind_url = f"{MEDIA_SUBDIR.name}/{mind_dest_path.name}"
 
-        template_path = Path("template_mind_ar.html")
+        template_path = Path("template_ar.html")
         if not template_path.exists():
             print(f"ERROR: The template file '{template_path}' was not found!")
             return
@@ -118,25 +107,25 @@ def action_create_mindar_live_photo():
         html_content = html_content.replace("__VIDEO_URL__", video_url)
         html_content = html_content.replace("__MIND_FILE_URL__", mind_url)
 
-        final_html_name = f"{build_safe_name(base_image_path, code_len=6)}.html"
+        final_html_name = f"{build_safe_name(base_image_path.stem, code_len=6)}.html"
         final_html_path = MEDIA_SUBDIR.parent / final_html_name
         final_html_path.write_text(html_content, encoding='utf-8')
 
+        # TODO: replace with server your own ngrok url, https is needed"
         ar_page_url = f"https://867bcdf3a993.ngrok-free.app/{final_html_name}"
 
         pos_input = prompt("\nQR Code Position (1: top-left, 2: top-right, 3: bottom-left, 4: bottom-right) [4]: ").strip() or "4"
         position = _get_position_from_input(pos_input)
 
-        print("\nApplying QR Code that links to the MindAR experience...")
+        print("\nApplying QR Code that links to the AR experience...")
         out_path = add_qr_watermark(base_image_path, ar_page_url, corner=position)
 
-        print("\n✅ Success! MindAR experience created.")
+        print("\n✅ Success! AR experience created.")
         print(f"Image with QR Code saved to: {out_path}")
         print(f"Experience URL: {ar_page_url}")
         print("\n=== INSTRUCTIONS ===")
         print("  1) Open the link on your phone and allow CAMERA access.")
         print("  2) Point it at the base image to see the video overlay.")
-        print("  (iOS requires HTTPS outside of localhost).")
 
     except FileNotFoundError as e:
         print(f"File error: {e}")

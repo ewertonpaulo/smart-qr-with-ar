@@ -1,32 +1,34 @@
 import sys
 import os
+import time
 from utils.utils import prompt, APP_NAME
 from actions import (
     action_add_watermark_qr,
-    action_watermark_with_media_link,
-    action_create_mindar_live_photo
+    action_add_memory_qr,
+    action_create_ar_live_photo
 )
 from local_server import stop_local_server, start_local_server
 
 
 def clear_screen():
+    time.sleep(3)
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def print_menu():
     print("\n" + "=" * 50)
     print(f"{APP_NAME}")
     print("=" * 50)
-    print("1) Add a memory to image")
-    print("2) Add QR Code to an image")
-    print("3) Create 'Live Photo' with MindAR (.mind)")
+    print("1) Add QR Code to an image")
+    print("2) Add a memory to an image")
+    print("3) Create 'Live Photo'")
     print("0) Exit")
     print("-" * 50)
 
 def main():
     actions = {
-        "1": action_watermark_with_media_link,
-        "2": action_add_watermark_qr,
-        "3": action_create_mindar_live_photo
+        "1": action_add_watermark_qr,
+        "2": action_add_memory_qr,
+        "3": action_create_ar_live_photo
     }
     try:
         start_local_server()
@@ -41,6 +43,7 @@ def main():
             action = actions.get(choice)
             if action:
                 action()
+                # clear_screen()
             else:
                 print("Invalid option. Please try again.")
     finally:
