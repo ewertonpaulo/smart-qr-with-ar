@@ -1,0 +1,17 @@
+{
+  "name": "mindar-offline-compiler",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Compile .mind (MindAR) files offline in Node using OfflineCompiler",
+  "engines": {
+    "node": "18.20.4"
+  },
+  "scripts": {
+    "compile": "node compile-offline.mjs"
+  },
+  "dependencies": {
+    "canvas": "^2.11.2",
+    "mind-ar": "github:ewertonpaulo/mind-ar-js"
+  }
+}
